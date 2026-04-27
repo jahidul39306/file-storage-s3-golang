@@ -43,6 +43,10 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 	defer file.Close()
 
 	mediaType := header.Header.Get("Content-Type")
+	if mediaType != "image/jpeg" && mediaType != "image/png" {
+		respondWithError(w, http.StatusBadRequest, "not supported file type", err)
+		return
+	}
 
 	videoInfo, err := cfg.db.GetVideo(videoID)
 	if err != nil {
@@ -55,7 +59,7 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	filePath := cfg.getAssetPath(videoIDString, mediaType)
+	filePath := getAssetPath(videoIDString, mediaType)
 	newFile, err := os.Create(filePath)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Unable to create a new file", err)
@@ -71,6 +75,7 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 	}
 
 	thumbnailURL := cfg.getAssetURL(filePath)
+	fmt.Printf(thumbnailURL)
 	videoInfo.ThumbnailURL = &thumbnailURL
 	err = cfg.db.UpdateVideo(videoInfo)
 	if err != nil {

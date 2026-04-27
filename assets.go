@@ -14,13 +14,13 @@ func (cfg apiConfig) ensureAssetsDir() error {
 	return nil
 }
 
-func (cfg apiConfig) getAssetPath(videoIDString string, mediaType string) string {
+func getAssetPath(videoIDString string, mediaType string) string {
 	mediaTypeParts := strings.Split(mediaType, "/")
 	fileName := fmt.Sprint(videoIDString + "." + mediaTypeParts[1])
-	filePath := filepath.Join(cfg.assetsRoot, fileName)
+	filePath := filepath.Join(fileName)
 	return filePath
 }
 
 func (cfg apiConfig) getAssetURL(assetPath string) string {
-	return fmt.Sprintf("/assets/" + assetPath)
+	return fmt.Sprintf("http://localhost:%s/assets/%s", cfg.port, assetPath)
 }
