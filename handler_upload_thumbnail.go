@@ -59,7 +59,7 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	filePath := getAssetPath(videoIDString, mediaType)
+	filePath := cfg.getAssetPath(videoIDString, mediaType)
 	newFile, err := os.Create(filePath)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Unable to create a new file", err)
