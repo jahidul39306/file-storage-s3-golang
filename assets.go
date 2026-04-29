@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -31,4 +32,16 @@ func (cfg *apiConfig) getAssetPath(mediaType string) (string, error) {
 
 func (cfg *apiConfig) getAssetURL(assetPath string) string {
 	return fmt.Sprintf("http://localhost:%s/%s", cfg.port, assetPath)
+}
+
+func (cfg *apiConfig) generateS3Key(filename string) (string, error) {
+	b := make([]byte, 16)
+	_, err := rand.Read(b)
+	if err != nil {
+		return "", err
+	}
+	encoded := hex.EncodeToString(b)
+	ext := filepath.Ext(filename)
+
+	return fmt.Sprintf("%s%s", encoded, ext), nil
 }
