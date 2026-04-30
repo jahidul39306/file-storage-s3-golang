@@ -1,11 +1,14 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"mime"
 	"net/http"
 	"os"
+	"os/exec"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
@@ -84,20 +87,36 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 
 	tempFile.Seek(0, io.SeekStart)
 
+	ratio, err := getVideAspectRation(tempFile.Name())
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Unable to get video ratio", err)
+		return
+	}
+
+	prefix := "other"
+
+	if ratio == "16:9" {
+		prefix = "landscape"
+	} else if ratio == "9:16" {
+		prefix = "portrait"
+	}
+
 	fileKey, err := cfg.generateS3Key(header.Filename)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Unable to generate s3 key", err)
 		return
 	}
 
+	newFileKey := fmt.Sprintf("%s/%s", prefix, fileKey)
+
 	_, err = cfg.s3Client.PutObject(r.Context(), &s3.PutObjectInput{
 		Bucket:      aws.String(cfg.s3Bucket),
-		Key:         aws.String(fileKey),
+		Key:         aws.String(newFileKey),
 		Body:        tempFile,
 		ContentType: aws.String(mediaType),
 	})
 
-	videoURL := fmt.Sprintf("https://%s.s3.%s.amazonaws.com/%s", cfg.s3Bucket, cfg.s3Region, fileKey)
+	videoURL := fmt.Sprintf("https://%s.s3.%s.amazonaws.com/%s", cfg.s3Bucket, cfg.s3Region, newFileKey)
 	videoInfo.VideoURL = &videoURL
 	fmt.Println("Updating video URL to:", videoURL)
 	err = cfg.db.UpdateVideo(videoInfo)
@@ -106,5 +125,43 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	respondWithJSON(w, http.StatusOK, videoInfo)
+}
 
+func getVideAspectRation(filePath string) (string, error) {
+	type VideoMetaData struct {
+		Streams []struct {
+			Width  int `json:"width"`
+			Height int `json:"height"`
+		} `json:"streams"`
+	}
+
+	var buf bytes.Buffer
+	var data VideoMetaData
+	cmd := exec.Command("ffprobe", "-v", "error", "-print_format", "json", "-show_streams", filePath)
+	cmd.Stdout = &buf
+	err := cmd.Run()
+	if err != nil {
+		return "", err
+	}
+
+	err = json.Unmarshal(buf.Bytes(), &data)
+	if err != nil {
+		return "", err
+	}
+
+	if len(data.Streams) > 0 {
+		w := float64(data.Streams[0].Width)
+		h := float64(data.Streams[0].Height)
+
+		ratio := w / h
+
+		if ratio > 1 {
+			return "16:9", nil
+		} else if ratio < 1 {
+			return "9:16", nil
+		} else {
+			return "other", nil
+		}
+	}
+	return "", nil
 }
