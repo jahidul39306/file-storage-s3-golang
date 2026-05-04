@@ -79,7 +79,6 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 	}
 
 	thumbnailURL := cfg.getAssetURL(filePath)
-	fmt.Printf(thumbnailURL)
 	videoInfo.ThumbnailURL = &thumbnailURL
 	err = cfg.db.UpdateVideo(videoInfo)
 	if err != nil {

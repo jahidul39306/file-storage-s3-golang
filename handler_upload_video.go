@@ -77,7 +77,6 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 	}
 
 	defer os.Remove(tempFile.Name())
-	defer tempFile.Close()
 
 	_, err = io.Copy(tempFile, file)
 	if err != nil {
@@ -87,11 +86,25 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 
 	tempFile.Seek(0, io.SeekStart)
 
-	ratio, err := getVideAspectRation(tempFile.Name())
+	ratio, err := getVideoAspectRation(tempFile.Name())
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Unable to get video ratio", err)
 		return
 	}
+	tempFile.Close()
+
+	processedVideoFilePath, err := processVideoForFastStart(tempFile.Name())
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Unable to process video for fast start", err)
+		return
+	}
+	processedFile, err := os.Open(processedVideoFilePath)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Unable to open processed file", err)
+		return
+	}
+	defer os.Remove(processedVideoFilePath)
+	defer processedFile.Close()
 
 	prefix := "other"
 
@@ -112,7 +125,7 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 	_, err = cfg.s3Client.PutObject(r.Context(), &s3.PutObjectInput{
 		Bucket:      aws.String(cfg.s3Bucket),
 		Key:         aws.String(newFileKey),
-		Body:        tempFile,
+		Body:        processedFile,
 		ContentType: aws.String(mediaType),
 	})
 
@@ -127,7 +140,7 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 	respondWithJSON(w, http.StatusOK, videoInfo)
 }
 
-func getVideAspectRation(filePath string) (string, error) {
+func getVideoAspectRation(filePath string) (string, error) {
 	type VideoMetaData struct {
 		Streams []struct {
 			Width  int `json:"width"`
@@ -164,4 +177,16 @@ func getVideAspectRation(filePath string) (string, error) {
 		}
 	}
 	return "", nil
+}
+
+func processVideoForFastStart(filePath string) (string, error) {
+	outputFilePath := filePath + ".processing"
+
+	cmd := exec.Command("ffmpeg", "-i", filePath, "-c", "copy", "-movflags", "faststart", "-f", "mp4", outputFilePath)
+	err := cmd.Run()
+	if err != nil {
+		return "", err
+	}
+
+	return outputFilePath, nil
 }
